@@ -167,6 +167,24 @@ input,
   -webkit-app-region: no-drag;
 }
 
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.98) translateY(4px); }
+}
+.fade-in {
+  animation: fade-in var(--dur) var(--ease-out) both;
+}
+.pop-in {
+  animation: pop-in var(--dur) var(--ease-out) both;
+}
+
 @keyframes shimmer {
   from { background-position: 200% 0; }
   to { background-position: -200% 0; }

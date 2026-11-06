@@ -29,7 +29,7 @@ jobs:
         run: |
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tauri.conf.json.tmp
           mv tauri.conf.json.tmp src-tauri/tauri.conf.json
-          echo "Building Stickman Studio $VERSION"
+          echo "Building Toon Studio $VERSION"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -69,7 +69,7 @@ jobs:
         id: dmg
         run: |
           dmg=$(ls src-tauri/target/release/bundle/dmg/*.dmg | head -1)
-          name="Stickman-Studio-$VERSION-arm64.dmg"
+          name="Toon-Studio-$VERSION-arm64.dmg"
           mv "$dmg" "$name"
           echo "path=$name" >> "$GITHUB_OUTPUT"
           ls -lh "$name"
@@ -79,13 +79,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes=$(cat <<EOF
-          Stickman Studio $VERSION for Apple silicon Macs (macOS 14 or later), built from ${GITHUB_SHA::7}.
+          Toon Studio $VERSION for Apple silicon Macs (macOS 14 or later), built from ${GITHUB_SHA::7}.
 
-          **Install:** open the DMG and drag Stickman Studio to Applications.
+          **Install:** open the DMG and drag Toon Studio to Applications.
 
           The app isn't notarized, so the first time macOS may say it "is damaged" or can't be checked. Clear that once with:
 
-              xattr -dr com.apple.quarantine "/Applications/Stickman Studio.app"
+              xattr -dr com.apple.quarantine "/Applications/Toon Studio.app"
 
           The AI models (about 13 GB) download inside the app on first run.
 
@@ -94,5 +94,5 @@ jobs:
           )
           gh release create "v$VERSION" "${{ steps.dmg.outputs.path }}" \
             --target "$GITHUB_SHA" \
-            --title "Stickman Studio $VERSION" \
+            --title "Toon Studio $VERSION" \
             --notes "$notes"

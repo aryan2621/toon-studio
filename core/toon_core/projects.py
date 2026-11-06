@@ -22,9 +22,9 @@ from .servers import Cancelled, Engines
 PROJECT_FILE = "project.json"
 PREVIEW_FILE = "preview.mp4"
 # Bump when the edit itself changes (cuts, captions, mix), so existing videos offer an update.
-RENDER_VERSION = 4
-SHOT_FIELDS = ("narration", "scene", "camera", "caption", "speaker", "samePicture")
-CLOUD_DRAWS_AT_ONCE = 4  # Cloudflare draws several shots side by side; this Mac draws one at a time
+RENDER_VERSION = 5
+SHOT_FIELDS = ("narration", "scene", "camera", "transition", "emotion", "caption", "speaker", "samePicture")
+CLOUD_DRAWS_AT_ONCE = 4
 
 
 def _key(*parts) -> str:
@@ -65,7 +65,7 @@ def _voice_for(project: dict, shot: dict) -> str:
     speaker = shot.get("speaker")
     if speaker and speaker != styles.NARRATOR:
         for c in project["plan"].get("characters", []):
-            if c["name"] == speaker and c.get("voice") in styles.VOICES:
+            if c["name"] == speaker and c.get("voice") and styles.voice_ok(c["voice"]):
                 return c["voice"]
     return project["settings"]["voice"]
 
@@ -86,15 +86,16 @@ def _image_key(project: dict, shot: dict) -> str:
 
 def _audio_key(project: dict, shot: dict) -> str:
     s = project["settings"]
-    return _key(_voice_for(project, shot), s.get("speed", 1.0), shot["narration"])
+    emotion = shot.get("emotion", "neutral")
+    return _key(_voice_for(project, shot), s.get("speed", 1.0), shot["narration"], *([emotion] if emotion != "neutral" else []))
 
 
 def _video_key(project: dict) -> str:
     s = project["settings"]
     all_shots = project["plan"]["shots"]
-    shots = [(all_shots[_source(all_shots, i)].get("imageKey"), sh.get("audioKey"), sh["camera"], sh["caption"], sh["stage"], bool(sh.get("samePicture")))
+    shots = [(all_shots[_source(all_shots, i)].get("imageKey"), sh.get("audioKey"), sh["camera"], sh["caption"], sh["stage"], bool(sh.get("samePicture")), sh.get("transition", "auto"))
              for i, sh in enumerate(all_shots)]
-    return _key(shots, s["ratio"], s["captions"], s.get("music"), s.get("musicMood"), s.get("sfx"), RENDER_VERSION)
+    return _key(shots, s["ratio"], s["captions"], s.get("music"), s.get("musicMood"), s.get("sfx"), s.get("transitions", "auto"), RENDER_VERSION)
 
 
 def view(project: dict) -> dict:
@@ -109,6 +110,8 @@ def view(project: dict) -> dict:
         shots.append({
             **{k: shot[k] for k in ("stage", "narration", "scene", "camera", "caption")},
             "speaker": shot.get("speaker") or styles.NARRATOR,
+            "transition": shot.get("transition", "auto"),
+            "emotion": shot.get("emotion", "neutral"),
             "samePicture": bool(shot.get("samePicture")) and i > 0,
             "image": str(folder / pic["image"]) if pic.get("image") and (folder / pic["image"]).exists() else None,
             "imageStale": not image_ok,
@@ -180,6 +183,7 @@ def _check_settings(settings: dict) -> dict:
         "music": settings.get("music"),
         "musicMood": settings.get("musicMood", "curious"),
         "sfx": bool(settings.get("sfx", True)),
+        "transitions": settings.get("transitions", "auto"),
         "engine": settings.get("engine", "local"),
         "mode": settings.get("mode", "auto"),
         "language": settings.get("language", "en"),
@@ -200,10 +204,13 @@ def _check_settings(settings: dict) -> dict:
         s["captions"] = "subtitles"
     if s["ratio"] not in styles.FORMATS:
         raise ValueError("Unknown format")
+    s["style"] = styles.LEGACY.get(s["style"], s["style"])
     if s["style"] not in styles.STYLES and s["style"] != "auto":
         raise ValueError("Unknown style")
-    if s["voice"] not in styles.VOICES:
+    if not styles.voice_ok(s["voice"]):
         raise ValueError("Unknown voice")
+    if s["transitions"] not in styles.TRANSITION_SETTINGS:
+        raise ValueError("Unknown transition")
     if s["musicMood"] not in styles.MUSIC:
         raise ValueError("Unknown music")
     if s["captions"] not in ("subtitles", "keywords", "off"):
@@ -377,6 +384,10 @@ class Studio:
                         base[field] = " ".join(str(edited[field]).split())
                 if base.get("camera") not in styles.CAMERA_MOVES:
                     base["camera"] = "push_in"
+                if base.get("transition") not in styles.TRANSITIONS:
+                    base["transition"] = "auto"
+                if base.get("emotion") not in styles.EMOTIONS:
+                    base["emotion"] = "neutral"
                 if not base.get("narration") or not base.get("scene"):
                     raise ValueError(f"Shot {len(shots) + 1} needs both narration and a scene")
                 shots.append(base)
@@ -390,7 +401,7 @@ class Studio:
             for c in project["plan"].get("characters", []):
                 voice_id = voices.get(c["name"])
                 if voice_id is not None:
-                    if voice_id not in styles.VOICES:
+                    if not styles.voice_ok(voice_id):
                         raise ValueError("Unknown voice")
                     c["voice"] = voice_id
         if "settings" in changes or "characters" in changes:
@@ -443,7 +454,7 @@ class Studio:
                 if not drawn and j == i:
                     render.sketch_card(image, s["style"], s["ratio"], i, sh["stage"], sh["scene"])
                 shots.append(render.Shot(image, folder / sh["audio"], sh["seconds"], sh["camera"], sh["caption"], sh["narration"], sh["stage"], j != i,
-                                         s.get("language", "en")))
+                                         s.get("language", "en"), styles.resolve_transition(s.get("transitions", "auto"), sh.get("transition", "auto"), i)))
             self._progress(project_id, "render", "Putting the preview together…", 0, 100)
             render.render(
                 shots, s["ratio"], "subtitles" if s["captions"] == "both" else s["captions"], s.get("musicMood", "curious"),
@@ -466,7 +477,13 @@ class Studio:
                 continue
             self._progress(project["id"], "voice", f"Recording line {i + 1} of {len(shots)}", i, len(shots))
             name = f"voice/{i + 1:02d}-{key}.wav"
-            shot["seconds"] = round(voice.speak(shot["narration"], _voice_for(project, shot), s.get("speed", 1.0), folder / name), 3)
+            who = _voice_for(project, shot)
+            try:
+                seconds = voice.speak(shot["narration"], who, s.get("speed", 1.0), folder / name, shot.get("emotion", "neutral"))
+            except cloud.Unavailable as e:
+                cloud.note_problem("voice", str(e))
+                seconds = voice.speak(shot["narration"], styles.default_voice(s.get("language", "en")), s.get("speed", 1.0), folder / name, shot.get("emotion", "neutral"))
+            shot["seconds"] = round(seconds, 3)
             self._replace(folder, shot, "audio", name)
             shot["audioKey"] = key
             save(project)
@@ -498,7 +515,7 @@ class Studio:
             self._draw(project, folder, i, n, len(stale))
 
     def _draw_in_parallel(self, project: dict, folder: Path, stale: list[int]):
-        """Cloudflare draws several shots at once; each is saved as soon as it arrives. A shot the
+        """the cloud AI draws several shots at once; each is saved as soon as it arrives. A shot the
         cloud can't draw falls back to this Mac inside `engines.draw`, one at a time."""
         total = len(stale)
         self._progress(project["id"], "images", f"Drawing {total} shots in the cloud", 0, total)
@@ -562,9 +579,10 @@ class Studio:
         for i, sh in enumerate(plan_shots):
             j = _source(plan_shots, i)
             shots.append(render.Shot(folder / plan_shots[j]["image"], folder / sh["audio"], sh["seconds"], sh["camera"], sh["caption"],
-                                     sh["narration"], sh["stage"], j != i, s.get("language", "en")))
+                                     sh["narration"], sh["stage"], j != i, s.get("language", "en"),
+                                     styles.resolve_transition(s.get("transitions", "auto"), sh.get("transition", "auto"), i)))
         # Only what a file name can't hold goes (Hindi's vowel signs aren't "\w", so keep them).
-        title = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", project["plan"]["title"]).strip()[:60] or "Stickman video"
+        title = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", project["plan"]["title"]).strip()[:60] or "Toon video"
         name = f"{title}.mp4"
         self._progress(project["id"], "render", "Putting the video together…", 0, 100)
         seconds = render.render(

@@ -1,7 +1,6 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-// Shapes returned by the Python core (core/stickman_core). Keep in sync with ipc.py / projects.py.
 
 export type Ratio = '9:16' | '16:9';
 export type Captions = 'subtitles' | 'keywords' | 'off';
@@ -25,6 +24,7 @@ export interface VideoSettings {
     musicMood?: string;
     /** Whooshes on the transitions. */
     sfx?: boolean;
+    transitions?: string;
     /** Where the plan and the drawings are made. */
     engine?: Engine;
     /** The template the plan follows ("auto": none, the source decides). */
@@ -53,6 +53,8 @@ export interface Shot {
     narration: string;
     scene: string;
     camera: Camera;
+    transition: string;
+    emotion: string;
     caption: string;
     image: string | null;
     imageStale: boolean;
@@ -102,7 +104,10 @@ export interface Options {
     languages: { id: string; name: string }[];
     telling: { id: Telling; name: string }[];
     music: { id: string; name: string }[];
-    modes: { id: string; name: string; note: string; defaults: Partial<Pick<VideoSettings, 'musicMood' | 'captions' | 'speed'>> }[];
+    emotions: { id: string; name: string }[];
+    transitions: { id: string; name: string }[];
+    shotTransitions: { id: string; name: string }[];
+    modes: { id: string; name: string; note: string; defaults: Partial<Pick<VideoSettings, 'musicMood' | 'captions' | 'speed' | 'telling'>> }[];
 }
 
 export interface ModelChoice {
@@ -140,11 +145,18 @@ export interface Job {
     total?: number;
 }
 
+export type CloudProvider = 'openai' | 'claude' | 'gemini' | 'compatible';
+
 export interface CloudStatus {
-    accountId: string;
+    provider: CloudProvider | '';
+    providerName: string;
+    baseUrl: string;
+    storyModel: string;
+    imageModel: string;
+    voiceModel: string;
     connected: boolean;
     /** The last time the cloud couldn't do the work this session, and why. */
-    problem: { what: 'images' | 'story'; reason: string; at: number } | null;
+    problem: { what: 'images' | 'story' | 'voice'; reason: string; at: number } | null;
 }
 
 /** The cloud couldn't do something, so this Mac did it instead. */
@@ -186,6 +198,8 @@ export interface ShotEdit {
     narration: string;
     scene: string;
     camera: Camera;
+    transition?: string;
+    emotion?: string;
     caption: string;
     speaker?: string;
     samePicture?: boolean;
@@ -215,7 +229,9 @@ export const api = {
     preview: (id: string) => call<Project>('preview', { id }),
     memory: () => call<Memory>('memory'),
     musicSample: (mood: string) => call<string>('music_sample', { mood }),
-    cloudConnect: (accountId: string, token: string) => call<CloudStatus>('cloud_connect', { accountId, token }),
+    voiceSample: (voice: string, emotion = 'neutral') => call<string>('voice_sample', { voice, emotion }),
+    cloudConnect: (provider: CloudProvider, token: string, baseUrl = '', storyModel = '', imageModel = '', voiceModel = '') =>
+        call<CloudStatus>('cloud_connect', { provider, token, baseUrl, storyModel, imageModel, voiceModel }),
     cloudDisconnect: () => call<void>('cloud_disconnect'),
     redrawShot: (id: string, index: number) => call<Project>('redraw_shot', { id, index }),
     importMusic: (id: string, path: string) => call<Project>('import_music', { id, path }),
@@ -286,6 +302,8 @@ export const readingSeconds = (text: string) => text.split(/\s+/).filter(Boolean
 /** The offered length closest to `seconds`. */
 export const nearestLength = (seconds: number, lengths: number[]) =>
     lengths.reduce((best, d) => (Math.abs(d - seconds) < Math.abs(best - seconds) ? d : best), lengths[0]);
+
+export const voicesFor = (options: Options, language: string) => options.voices.filter((v) => v.language === language || v.language === '*');
 
 export const lengthLabel = (d: number) => (d < 60 || d % 60 ? `${d}s` : `${d / 60} min`);
 

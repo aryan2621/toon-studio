@@ -1,19 +1,19 @@
-# Stickman Studio
+# Toon Studio
 
-**Write a story. Get a narrated stickman video. Everything runs on your Mac.**
+**Write a story or idea. Pick a look. Get a narrated animated video. Everything runs on your Mac.**
 
-Stickman Studio turns whatever you write (a story, a script, an idea to explain, a poem, rough
+Toon Studio turns whatever you write (a story, a script, an idea to explain, a poem, rough
 notes or just a topic) into a finished short video: a director's plan you can edit, a stick-figure drawing for every shot, a narrator's voice, camera moves,
-captions and optional background music, exported as an MP4 for YouTube Shorts, TikTok, Reels or
+captions, transitions, emotional voices and optional background music, exported as an MP4 for YouTube Shorts, TikTok, Reels or
 YouTube.
 
 Nothing is uploaded and there's no account or API key: open-source models do the work, on your Mac.
-Optionally, connect a free Cloudflare account to draw shots in seconds instead of about a minute.
+Optionally, connect your own OpenAI, Claude, Gemini or OpenAI-compatible account to write plans and draw shots in the cloud.
 
 ## How it works
 
 1. **Write**: anything. Pick vertical (9:16) or wide (16:9), a length (30 s to 3 min), a style (or
-   Auto), a narrator, the music, and where to make it (this Mac or Cloudflare).
+   Auto), a narrator, the music, and where to make it (this Mac or your cloud AI).
 2. **Review the plan**: an AI director writes a shot-by-shot plan shaped by what you wrote: a
    story is told in order with its dialogue kept, a script keeps its words, a topic gets a hook and
    a payoff. Edit any line, scene, camera move or caption, add or remove shots, or ask for a rewrite.
@@ -27,10 +27,12 @@ Optionally, connect a free Cloudflare account to draw shots in seconds instead o
 |---|---|
 | Classic · Light | Black stick figure on pure white, one red accent |
 | Classic · Dark | White stick figure on black, one glowing cyan accent |
-| Studio Tech | "Zeke" (red beanie, yellow t-shirt) in a bright studio with floating glass UI |
-| Cinematic Story | Zeke in full-colour scenes with cinematic light |
-| Storybook | A children's picture book: soft watercolour and pencil on cream paper |
-| Comic book | Bold ink lines, flat colours and dramatic angles |
+| Whiteboard | Black marker doodles on a white board |
+| Chalkboard | Chalk drawings on a dark green board |
+| Claymation | Plasticine stop-motion characters |
+| Fruit drama | Glossy talking fruit and objects acting out a soap opera |
+| Talking organs | Cute body organs with personalities |
+| AI mascot | A low-poly 3D blob mascot in a dark room with warm orange light |
 
 The styles and the explainer arc come from [Stickman Video Director](https://github.com/kaomei/stickman-video-director),
 adapted from prompts for a cloud video model to a fully local, image-based pipeline.

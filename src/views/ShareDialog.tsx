@@ -99,8 +99,8 @@ export function ShareDialog({ projectId, title, onClose }: { projectId: string; 
                                 <ol className='mt-2 list-decimal space-y-1 pl-4'>
                                     <li>Make sure the phone is on the same Wi-Fi, not mobile data (turn mobile data off to be sure).</li>
                                     <li>
-                                        macOS firewall: if asked whether Stickman Studio may accept incoming connections, choose Allow. Otherwise open System
-                                        Settings → Network → Firewall → Options, and set Stickman Studio to “Allow incoming connections”.
+                                        macOS firewall: if asked whether Toon Studio may accept incoming connections, choose Allow. Otherwise open System
+                                        Settings → Network → Firewall → Options, and set Toon Studio to “Allow incoming connections”.
                                     </li>
                                     <li>Disconnect any VPN on this Mac while sending.</li>
                                     <li>Some office and guest Wi-Fi networks stop devices talking to each other. Use your home Wi-Fi or your phone’s hotspot instead.</li>

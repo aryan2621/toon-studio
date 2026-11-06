@@ -1,4 +1,4 @@
-# Stickman Studio: developer guide
+# Toon Studio: developer guide
 
 [← Back to README](../README.md)
 
@@ -10,7 +10,7 @@ stable-diffusion.cpp) and [uv](https://docs.astral.sh/uv/) (for the Python core)
 ```bash
 pnpm install
 pnpm tauri build --bundles app
-cp -R src-tauri/target/release/bundle/macos/Stickman\ Studio.app /Applications/
+cp -R src-tauri/target/release/bundle/macos/Toon\ Studio.app /Applications/
 ```
 
 ```bash
@@ -29,7 +29,7 @@ The core can also be run by hand, which is the quickest way to try a change:
 
 ```bash
 cd core
-STICKMAN_BIN_DIR=../src-tauri/binaries uv run python core_entry.py
+TOON_BIN_DIR=../src-tauri/binaries uv run python core_entry.py
 {"id": 1, "method": "status"}
 ```
 
@@ -40,17 +40,17 @@ thin **Rust shell** (Tauri) with a **React UI**.
 
 | Path | What it is |
 |---|---|
-| `core/stickman_core/ipc.py` | The JSON-lines protocol on stdin/stdout; one thread per request, events for progress |
-| `core/stickman_core/models.py` | The model catalog (files, sizes, which ones each choice needs), Settings, downloads |
-| `core/stickman_core/servers.py` | Starts and stops `llama-server` and `sd-server`; only one is in memory at a time |
-| `core/stickman_core/planner.py` | The director: story → plan (title, shots with narration, scene, camera, caption) |
-| `core/stickman_core/styles.py` | The visual styles (prompt templates), formats, voices and camera moves |
-| `core/stickman_core/voice.py` | Kokoro text to speech |
-| `core/stickman_core/render.py` | The edit: timing, cuts and slides, camera moves, captions; encoded with ffmpeg |
-| `core/stickman_core/audio.py` | Generated music, whooshes, and the mix with the narration |
-| `core/stickman_core/cloud.py` | Optional Cloudflare Workers AI: drawing (FLUX.2 klein 4B) and planning (Gemma 4 26B), token in the Keychain |
-| `core/stickman_core/system.py` | Free memory, swap and the biggest apps, for the warning before drawing |
-| `core/stickman_core/projects.py` | Videos on disk, incremental production, one job at a time with cancel |
+| `core/toon_core/ipc.py` | The JSON-lines protocol on stdin/stdout; one thread per request, events for progress |
+| `core/toon_core/models.py` | The model catalog (files, sizes, which ones each choice needs), Settings, downloads |
+| `core/toon_core/servers.py` | Starts and stops `llama-server` and `sd-server`; only one is in memory at a time |
+| `core/toon_core/planner.py` | The director: story → plan (title, shots with narration, scene, camera, caption) |
+| `core/toon_core/styles.py` | The visual styles (prompt templates), formats, voices and camera moves |
+| `core/toon_core/voice.py` | Kokoro text to speech |
+| `core/toon_core/render.py` | The edit: timing, cuts and slides, camera moves, captions; encoded with ffmpeg |
+| `core/toon_core/audio.py` | Generated music, whooshes, and the mix with the narration |
+| `core/toon_core/cloud.py` | Optional cloud engine: picks the connected provider, key in the Keychain; `providers.py` has the OpenAI / Claude / Gemini / OpenAI-compatible calls |
+| `core/toon_core/system.py` | Free memory, swap and the biggest apps, for the warning before drawing |
+| `core/toon_core/projects.py` | Videos on disk, incremental production, one job at a time with cancel |
 | `src-tauri/src/core.rs` | Starts the core sidecar and relays requests and events |
 | `src/views/` | First-run setup, new video, the project (plan editor + video) and Settings |
 | `src/lib/api.ts` | Typed calls into the core |
@@ -101,8 +101,19 @@ The UI is React 19 + Vite + Tailwind with the same look as Capturita, Murmur and
 - **Captions**: one kind at a time. Subtitles show two or three words on a dark pill near the
   bottom, the word being spoken in yellow (word times are estimated from each word's share of the
   line; Kokoro doesn't report them). Key words pop in large near the top. Both are drawn with Pillow.
-- **Soundtrack** (`audio.py`): the music is composed in code (pad chords, a plucked arpeggio, a
-  bass and a little echo, in three moods), so nothing has to be downloaded or licensed; or the user
+- **Transitions** (`render.py`, `TRANSITIONS`): crossfade, dip, flash, push, wipe, whip, zoom, iris
+  and glitch, each a per-frame PIL blend over the outgoing and incoming picture. The director picks
+  one per shot; the `transitions` setting (auto, smooth, punchy, cuts or one type) overrides it.
+  Each has a matching sound effect (`audio.transition_sound`), gated by the whoosh switch.
+- **Emotion**: the director tags each line (neutral, happy, excited, calm, serious, sad, angry,
+  scared, whisper, sarcastic), editable per shot. Local voices approximate it with speed, pitch and
+  gain (`styles.EMOTIONS`); cloud voices get it as an instruction in the request.
+- **Cloud voices** (`providers.speak`): OpenAI, Gemini and OpenAI-compatible servers; ids are
+  `provider:voice`. A failing cloud voice falls back to the default Kokoro voice with a notice.
+- **Defaults**: Settings > Defaults stores the per-video defaults in the webview; the New Video page
+  starts from them and each video can override.
+- **Soundtrack** (`audio.py`): the music is composed in code (eleven moods built from per-mood
+  chords, tempo, instruments and drum patterns), so nothing has to be downloaded or licensed; or the user
   picks a file. The music ducks under the voice (it follows the voice's loudness with a fast attack
   and slow release) and fills the gaps. Everything is mixed with numpy at 48 kHz stereo.
 - **Character consistency**: the character is described in every shot's prompt, framed close, and
@@ -144,21 +155,24 @@ The UI is React 19 + Vite + Tailwind with the same look as Capturita, Murmur and
   The progress line says when a shot is retried, or when a battery under 10% is slowing drawing.
 - **Sharpness**: each frame is cut from the original drawing and resampled once (Lanczos), after a
   light unsharp mask; before, it was enlarged to 1080p and then enlarged again by the camera zoom.
-- **Cloud (optional)**: with Cloudflare connected, each video chooses where it's made ("Make it
-  on": This Mac, the default, or Cloudflare; stored as `settings.engine`). Cloud shots come out
-  simpler than local ones, so it's a speed option. Switching a video redraws its shots on the new
-  side (the engine is part of a shot's image key). A Cloudflare video's jobs try Workers AI first. On the first
-  failure (free allowance used up, token rejected, offline) the job continues on this Mac, a
-  `notice` event warns the user with the reason, and the sidebar shows "Cloud unavailable".
-  The voice and the edit always run locally. Cloudflare draws four shots at once; this Mac draws one
-  at a time (sd-server's batch only makes variations of one prompt, and two models would swap).
-- **Cloud safety refusals**: Cloudflare's filter sometimes "flags" a harmless picture. That's a
+- **Cloud (optional)**: connect one of OpenAI, Claude, Gemini or an OpenAI-compatible server
+  (`cloud.py`, `providers.py`; the key lives in the Keychain). Each video chooses where it's made
+  ("Make it on": This Mac, the default, or Cloud AI; stored as `settings.engine`). Cloud shots come
+  out simpler than local ones, so it's a speed option. Switching a video redraws its shots on the
+  new side (the engine is part of a shot's image key). Claude can only write the plan; shots and
+  voices stay on this Mac. On the first failure (quota used up, key rejected, offline) the job
+  continues on this Mac, a `notice` event warns the user with the reason, and the sidebar shows
+  "Cloud unavailable". The edit always runs locally. Cloud drawing runs four shots at once; this
+  Mac draws one at a time (sd-server's batch only makes variations of one prompt, and two models
+  would swap).
+- **Cloud safety refusals**: a provider's filter sometimes flags a harmless picture. That's a
   `cloud.Refused`: only that shot is drawn on this Mac, and the rest of the job stays on the cloud.
-  Any other failure (allowance used up, token, network) moves the rest of the job to this Mac.
-- **Illustrated styles**: besides the stickman styles there are fully illustrated ones (Storybook,
-  Comic book). `styles.kind()` tells the director
-  whether characters are stick figures or real people (age, hair, clothes), and the Auto style can
-  pick them. The prompts describe each look in plain words; no add-on (LoRA) is needed: FLUX.2
+  Any other failure (quota, key, network) moves the rest of the job to this Mac.
+- **Illustrated styles**: besides the stickman styles there are whiteboard, chalkboard, claymation and
+  the character styles (fruit drama, talking organs, AI mascot). `styles.kind()` tells the director
+  whether characters are stick figures or real people (age, hair, clothes); a style's own `figures`
+  overrides that for non-human casts, and `auto: False` keeps it out of Auto. Styles that were removed
+  map to the nearest one in `styles.LEGACY`, so older videos still open. The prompts describe each look in plain words; no add-on (LoRA) is needed: FLUX.2
   klein draws them well from the description alone.
 - **Length**: the director is given a word budget (2.9 words a second) with a hard per-shot cap,
   and if the voiceover still comes back more than 15% long, over-long lines are ended at a
@@ -192,7 +206,7 @@ The UI is React 19 + Vite + Tailwind with the same look as Capturita, Murmur and
 
 ## Files
 
-- Models: `~/Library/Application Support/com.stickmanstudio.app/models/`
-- Settings: `~/Library/Application Support/com.stickmanstudio.app/settings.json`
-- Videos: `~/Movies/Stickman Studio/<id>/` (`project.json`, `shots/`, `voice/`, the MP4)
-- Logs: `~/Library/Logs/com.stickmanstudio.app/` (`llama-server.log`, `sd-server.log`, `ffmpeg.log`)
+- Models: `~/Library/Application Support/com.toonstudio.app/models/`
+- Settings: `~/Library/Application Support/com.toonstudio.app/settings.json`
+- Videos: `~/Movies/Toon Studio/<id>/` (`project.json`, `shots/`, `voice/`, the MP4)
+- Logs: `~/Library/Logs/com.toonstudio.app/` (`llama-server.log`, `sd-server.log`, `ffmpeg.log`)

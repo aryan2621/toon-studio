@@ -23,10 +23,10 @@ import {
     type Project,
     type ShotEdit,
     type VideoSettings,
-} from '../lib/api';
+ voicesFor } from '../lib/api';
 import { Badge, Button, Field, IconButton, Modal, ProgressBar, Segmented, Select, Spinner, Switch, cx } from '../components/ui';
 import { EnginePicker, engineNote } from '../components/EnginePicker';
-import { MusicPreview } from '../components/MusicPreview';
+import { MusicPreview, VoicePreview } from '../components/MusicPreview';
 import { ShareDialog } from './ShareDialog';
 
 type Draft = ShotEdit & { key: number };
@@ -39,12 +39,14 @@ const toDraft = (project: Project): Draft[] =>
         narration: s.narration,
         scene: s.scene,
         camera: s.camera,
+        transition: s.transition ?? 'auto',
+        emotion: s.emotion ?? 'neutral',
         caption: s.caption,
         speaker: s.speaker ?? NARRATOR,
         samePicture: s.samePicture ?? false,
     }));
 
-const SETTING_DEFAULTS: Partial<VideoSettings> = { engine: 'local', musicMood: 'curious', sfx: true, speed: 1 };
+const SETTING_DEFAULTS: Partial<VideoSettings> = { engine: 'local', musicMood: 'curious', sfx: true, speed: 1, transitions: 'auto' };
 
 /** A video: its plan (editable until you're happy), the drawn shots, and the finished video. */
 export function ProjectView({
@@ -120,11 +122,13 @@ export function ProjectView({
             try {
                 const p = await api.updateProject(id, {
                     title: titleRef.current,
-                    shots: sent.map(({ from, narration, scene, camera, caption, speaker, samePicture }) => ({
+                    shots: sent.map(({ from, narration, scene, camera, transition, emotion, caption, speaker, samePicture }) => ({
                         from,
                         narration,
                         scene,
                         camera,
+                        transition,
+                        emotion,
                         caption,
                         speaker,
                         samePicture,
@@ -190,7 +194,7 @@ export function ProjectView({
             next.splice(index + 1, 0, {
                 key: nextKey++,
                 narration: 'New line of narration.',
-                scene: 'The stick figure…',
+                scene: 'The character…',
                 camera: 'push_in',
                 caption: '',
                 speaker: NARRATOR,
@@ -275,7 +279,7 @@ export function ProjectView({
     /** Saves a copy of the finished video wherever the user picks (Downloads by default). */
     const download = async () => {
         if (!project) return;
-        const name = `${(project.title || 'Stickman video').replace(/[\\/:*?"<>|]/g, '').trim() || 'Stickman video'}.mp4`;
+        const name = `${(project.title || 'Toon video').replace(/[\\/:*?"<>|]/g, '').trim() || 'Toon video'}.mp4`;
         const target = await saveDialog({ defaultPath: `${await downloadDir()}/${name}`, filters: [{ name: 'Video', extensions: ['mp4'] }] });
         if (!target) return;
         try {
@@ -312,7 +316,7 @@ export function ProjectView({
     const totalWords = draft.reduce((n, s) => n + s.narration.split(/\s+/).filter(Boolean).length, 0);
     const drawingShot = busy && job?.stage === 'images' ? job.shot : undefined;
     const language = project.settings.language ?? 'en';
-    const voices = options.voices.filter((v) => v.language === language);
+    const voices = voicesFor(options, language);
     const speakers = [NARRATOR, ...project.characters.map((c) => c.name)];
     const speaks = (name: string) => draft.some((d) => d.speaker === name);
     /** The scene a shot's picture is drawn from: its own, or the one it shares. */
@@ -397,7 +401,7 @@ export function ProjectView({
                             const saved = shot.from !== undefined ? project.shots[shot.from] : undefined;
                             const isDrawing = drawingShot !== undefined && shot.from === drawingShot;
                             return (
-                                <div key={shot.key} className='group relative flex gap-4 rounded-xl border border-line bg-panel p-3'>
+                                <div key={shot.key} className='fade-in group relative flex gap-4 rounded-xl border border-line bg-panel p-3'>
                                     <div className={cx('relative shrink-0 overflow-hidden rounded-lg bg-panel-2', portrait ? 'h-[160px] w-[90px]' : 'h-[90px] w-[160px]')}>
                                         {saved?.image ? (
                                             <img src={fileUrl(saved.image, project.updatedAt)} className={cx('h-full w-full object-cover', saved.imageStale && 'opacity-40')} alt='' />
@@ -444,6 +448,34 @@ export function ProjectView({
                                                 {Object.entries(CAMERA_NAMES).map(([value, name]) => (
                                                     <option key={value} value={value}>
                                                         {name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {index > 0 && !shot.samePicture && (
+                                                <select
+                                                    value={shot.transition ?? 'auto'}
+                                                    disabled={busy}
+                                                    onChange={(e) => edit(shot.key, { transition: e.target.value })}
+                                                    className='rounded-md bg-transparent text-xs text-muted outline-none hover:text-fg'
+                                                    aria-label='Transition into this shot'
+                                                >
+                                                    {options.shotTransitions.map((t) => (
+                                                        <option key={t.id} value={t.id}>
+                                                            {t.id === 'auto' ? 'Transition: auto' : t.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <select
+                                                value={shot.emotion ?? 'neutral'}
+                                                disabled={busy}
+                                                onChange={(e) => edit(shot.key, { emotion: e.target.value })}
+                                                className='rounded-md bg-transparent text-xs text-muted outline-none hover:text-fg'
+                                                aria-label='How this line is spoken'
+                                            >
+                                                {options.emotions.map((m) => (
+                                                    <option key={m.id} value={m.id}>
+                                                        {m.id === 'neutral' ? 'Tone: neutral' : m.name}
                                                     </option>
                                                 ))}
                                             </select>
@@ -563,8 +595,8 @@ export function ProjectView({
                                     <div className='flex gap-2 rounded-md bg-warning-soft p-2 text-[11px] leading-snug text-warning-fg'>
                                         <AlertTriangle className='mt-0.5 h-3.5 w-3.5 shrink-0' />
                                         <span>
-                                            Cloudflare couldn’t do the {cloudNotice.what}: {cloudNotice.reason}.{' '}
-                                            {cloudNotice.justThisOne ? 'That one is made on this Mac; the rest stay on Cloudflare.' : 'Working on this Mac instead.'}
+                                            The cloud AI couldn’t do the {cloudNotice.what}: {cloudNotice.reason}.{' '}
+                                            {cloudNotice.justThisOne ? 'That one is made on this Mac; the rest stay on the cloud AI.' : 'Working on this Mac instead.'}
                                         </span>
                                     </div>
                                 )}
@@ -594,7 +626,7 @@ export function ProjectView({
                                           : project.videoStale
                                             ? 'The plan or settings changed since this video was made. Only what changed is redone.'
                                             : project.videoSeconds
-                                              ? `${formatDuration(project.videoSeconds)} · saved in Movies › Stickman Studio`
+                                              ? `${formatDuration(project.videoSeconds)} · saved in Movies › Toon Studio`
                                               : ''}
                                 </p>
                             </div>
@@ -637,7 +669,7 @@ export function ProjectView({
                                             {Object.keys(pending).length === 1 ? '1 change' : `${Object.keys(pending).length} changes`} not in the video yet.
                                         </span>{' '}
                                         {pending.engine
-                                            ? `Applying redraws all ${project.shots.length} shots ${pending.engine === 'cloud' ? 'on Cloudflare (a few minutes)' : 'on this Mac (about a minute each)'}.`
+                                            ? `Applying redraws all ${project.shots.length} shots ${pending.engine === 'cloud' ? 'on the cloud AI (a few minutes)' : 'on this Mac (about a minute each)'}.`
                                             : pending.voice || pending.speed
                                               ? 'Applying records the voice again and re-edits the video (about a minute). The drawings are kept.'
                                               : 'Applying re-edits the video (under a minute). The drawings and voice are kept.'}
@@ -662,13 +694,16 @@ export function ProjectView({
                                 <p className='text-[11px] leading-snug text-subtle'>{engineNote(shown('engine') ?? 'local', cloudConnected)}</p>
                             </Field>
                             <Field label='Narrator'>
-                                <Select value={shown('voice')} disabled={busy} onChange={(e) => changeSettings({ voice: e.target.value })}>
-                                    {voices.map((v) => (
-                                        <option key={v.id} value={v.id}>
-                                            {v.name}
-                                        </option>
-                                    ))}
-                                </Select>
+                                <div className='flex min-w-0 gap-2'>
+                                    <Select value={shown('voice')} disabled={busy} onChange={(e) => changeSettings({ voice: e.target.value })}>
+                                        {voices.map((v) => (
+                                            <option key={v.id} value={v.id}>
+                                                {v.name}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                    <VoicePreview voice={shown('voice') ?? ''} />
+                                </div>
                             </Field>
                             <Field label='Speaking pace'>
                                 <Segmented
@@ -715,9 +750,18 @@ export function ProjectView({
                                     </div>
                                 )}
                             </Field>
+                            <Field label='Transitions'>
+                                <Select value={shown('transitions') ?? 'auto'} disabled={busy} onChange={(e) => changeSettings({ transitions: e.target.value })}>
+                                    {options.transitions.map((t) => (
+                                        <option key={t.id} value={t.id}>
+                                            {t.name}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </Field>
                             <label className='flex items-center justify-between text-xs text-fg'>
-                                Whoosh on scene changes
-                                <Switch label='Whoosh on scene changes' checked={shown('sfx') ?? true} disabled={busy} onChange={(sfx) => changeSettings({ sfx })} />
+                                Sound on transitions
+                                <Switch label='Sound on transitions' checked={shown('sfx') ?? true} disabled={busy} onChange={(sfx) => changeSettings({ sfx })} />
                             </label>
                         </div>
 

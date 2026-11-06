@@ -13,7 +13,7 @@ import threading
 import time
 import traceback
 
-from . import audio, cloud, models, projects, servers, share, styles, system
+from . import audio, cloud, models, projects, servers, share, styles, system, voice
 
 
 class Core:
@@ -26,7 +26,10 @@ class Core:
             "options": lambda p: styles.options(),
             "memory": lambda p: system.memory(),
             "music_sample": lambda p: audio.sample(p["mood"]),
-            "cloud_connect": lambda p: cloud.connect(p["accountId"], p["token"]),
+            "voice_sample": lambda p: voice.sample(p["voice"], p.get("emotion", "neutral")),
+            "cloud_connect": lambda p: cloud.connect(
+                p["provider"], p["token"], p.get("baseUrl", ""), p.get("storyModel", ""), p.get("imageModel", ""), p.get("voiceModel", "")
+            ),
             "cloud_disconnect": lambda p: cloud.disconnect(),
             "preview": lambda p: self.studio.preview(p["id"]),
             "status": self.status,

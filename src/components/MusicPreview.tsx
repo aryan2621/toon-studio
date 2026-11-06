@@ -7,8 +7,7 @@ import { IconButton, Spinner } from './ui';
 // One player for the whole app, so starting a preview stops any other.
 let current: { audio: HTMLAudioElement; stop: () => void } | null = null;
 
-/** Plays a short sample of a music mood, or the user's own music file, to help choose. */
-export function MusicPreview({ mood, file }: { mood?: string; file?: string | null }) {
+function SamplePreview({ label, deps, disabled, limitMs, load }: { label: string; deps: unknown[]; disabled?: boolean; limitMs?: number; load: () => Promise<string | null> }) {
     const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle');
     const mine = useRef<HTMLAudioElement | null>(null);
 
@@ -20,13 +19,13 @@ export function MusicPreview({ mood, file }: { mood?: string; file?: string | nu
     };
 
     // A different choice, or leaving the page, stops the sample.
-    useEffect(() => stop, [mood, file]);
+    useEffect(() => stop, deps);
 
     const play = async () => {
         current?.stop();
         setState('loading');
         try {
-            const path = file ?? (mood && mood !== 'off' ? await api.musicSample(mood) : null);
+            const path = await load();
             if (!path) return setState('idle');
             const audio = new Audio(fileUrl(path));
             audio.volume = 0.8;
@@ -34,24 +33,33 @@ export function MusicPreview({ mood, file }: { mood?: string; file?: string | nu
             mine.current = audio;
             current = { audio, stop };
             await audio.play();
-            // A long music file: a 20-second taste is enough to decide.
-            if (file) setTimeout(() => mine.current === audio && stop(), 20000);
+            if (limitMs) setTimeout(() => mine.current === audio && stop(), limitMs);
             setState('playing');
         } catch (e) {
             stop();
-            toast.error(`Couldn’t play the music: ${String(e)}`);
+            toast.error(`Couldn’t play the sample: ${String(e)}`);
         }
     };
 
-    const disabled = !file && (!mood || mood === 'off');
     return (
-        <IconButton
-            label={state === 'playing' ? 'Stop the preview' : 'Listen to this music'}
-            variant='secondary'
-            disabled={disabled}
-            onClick={state === 'playing' ? stop : play}
-        >
+        <IconButton label={state === 'playing' ? 'Stop the preview' : label} variant='secondary' disabled={disabled} onClick={state === 'playing' ? stop : play}>
             {state === 'loading' ? <Spinner className='h-3.5 w-3.5' /> : state === 'playing' ? <Pause className='h-4 w-4' /> : <Play className='h-4 w-4' />}
         </IconButton>
     );
+}
+
+export function MusicPreview({ mood, file }: { mood?: string; file?: string | null }) {
+    return (
+        <SamplePreview
+            label='Listen to this music'
+            deps={[mood, file]}
+            disabled={!file && (!mood || mood === 'off')}
+            limitMs={file ? 20000 : undefined}
+            load={async () => file ?? (mood && mood !== 'off' ? await api.musicSample(mood) : null)}
+        />
+    );
+}
+
+export function VoicePreview({ voice, emotion = 'neutral' }: { voice: string; emotion?: string }) {
+    return <SamplePreview label='Listen to this voice' deps={[voice, emotion]} disabled={!voice} load={() => api.voiceSample(voice, emotion)} />;
 }

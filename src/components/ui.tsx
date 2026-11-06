@@ -4,6 +4,7 @@ import {
     useRef,
     useState,
     type ButtonHTMLAttributes,
+    type KeyboardEvent as ReactKeyboardEvent,
     type ReactNode,
     type SelectHTMLAttributes,
 } from 'react';
@@ -33,8 +34,8 @@ export function Button({ variant = 'secondary', size = 'md', className, ...props
     return (
         <button
             className={cx(
-                'inline-flex shrink-0 cursor-default items-center justify-center gap-2 rounded-lg font-medium transition-colors',
-                'disabled:opacity-40',
+                'inline-flex shrink-0 cursor-default items-center justify-center gap-2 rounded-lg font-medium transition-[color,background-color,border-color,transform] duration-150 ease-out',
+                'active:scale-[.98] disabled:opacity-40 disabled:active:scale-100',
                 variants[variant],
                 sizes[size],
                 className
@@ -178,14 +179,17 @@ export function Modal({
     onClose,
     dismissable = true,
     className,
+    label,
     children,
     ...rest
 }: {
     onClose: () => void;
     dismissable?: boolean;
     className?: string;
+    label?: string;
     children: ReactNode;
 } & Record<`data-${string}`, unknown>) {
+    const dialogRef = useRef<HTMLDivElement>(null);
     const closeRef = useRef(onClose);
     closeRef.current = onClose;
     const dismissRef = useRef(dismissable);
@@ -197,15 +201,42 @@ export function Modal({
             if (dismissRef.current) closeRef.current();
         };
         window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
+        const before = document.activeElement as HTMLElement | null;
+        dialogRef.current?.focus();
+        return () => {
+            window.removeEventListener('keydown', onKey, true);
+            before?.focus?.();
+        };
     }, []);
+    const trapTab = (event: ReactKeyboardEvent) => {
+        if (event.key !== 'Tab' || !dialogRef.current) return;
+        const items = [...dialogRef.current.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((el) => !el.hasAttribute('disabled'));
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    };
     return (
         <div
-            className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6'
+            className='fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm sm:p-6'
             onPointerDown={(e) => e.target === e.currentTarget && dismissable && onClose()}
             {...rest}
         >
-            <div className={cx('max-h-full w-full overflow-hidden rounded-2xl border border-line bg-panel shadow-panel', className)} role='dialog' aria-modal>
+            <div
+                ref={dialogRef}
+                tabIndex={-1}
+                onKeyDown={trapTab}
+                className={cx('pop-in max-h-full w-full overflow-hidden rounded-2xl border border-line bg-panel shadow-panel outline-none', className)}
+                role='dialog'
+                aria-modal='true'
+                aria-label={label}
+            >
                 {children}
             </div>
         </div>

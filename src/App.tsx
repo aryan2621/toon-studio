@@ -43,6 +43,10 @@ export function App() {
     }, []);
 
     useEffect(() => {
+        if (status) api.options().then(setOptions);
+    }, [status?.cloud.connected, status?.cloud.provider, status?.cloud.voiceModel]);
+
+    useEffect(() => {
         Promise.all([refreshStatus(), api.options().then(setOptions), api.listProjects()])
             .then(([status, , list]) => {
                 setProjects(list);
@@ -79,9 +83,9 @@ export function App() {
                 const notice = data as CloudNotice;
                 setCloudNotice(notice);
                 refreshStatus();
-                toast.warning(`Cloudflare couldn’t do the ${notice.what}`, {
+                toast.warning(`The cloud AI couldn’t do the ${notice.what}`, {
                     description: notice.justThisOne
-                        ? `${capitalise(notice.reason)}. That one is being made on this Mac; the rest stay on Cloudflare.`
+                        ? `${capitalise(notice.reason)}. That one is being made on this Mac; the rest stay on the cloud AI.`
                         : `${capitalise(notice.reason)}. Continuing on this Mac instead, which is slower.`,
                     duration: 12000,
                 });
@@ -103,7 +107,7 @@ export function App() {
         return (
             <div className='flex h-full items-center justify-center p-10 text-center'>
                 <div className='max-w-md space-y-2'>
-                    <h1 className='font-serif text-xl'>Stickman Studio couldn't start its engine</h1>
+                    <h1 className='font-serif text-xl'>Toon Studio couldn't start its engine</h1>
                     <p className='selectable text-sm text-muted'>{startError}</p>
                 </div>
             </div>
@@ -158,6 +162,7 @@ export function App() {
                 {!status.ready ? (
                     <SetupView status={status} download={download} onDone={refreshStatus} />
                 ) : screen.kind === 'new' ? (
+                    <div key='new' className='fade-in h-full'>
                     <NewVideoView
                         options={options}
                         job={job}
@@ -167,7 +172,9 @@ export function App() {
                             openProject(id);
                         }}
                     />
+                    </div>
                 ) : (
+                    <div key={screen.id} className='fade-in h-full'>
                     <ProjectView
                         key={screen.id}
                         id={screen.id}
@@ -182,12 +189,14 @@ export function App() {
                             setScreen({ kind: 'new' });
                         }}
                     />
+                    </div>
                 )}
             </main>
 
             {settingsOpen && (
                 <SettingsDialog
                     status={status}
+                    options={options}
                     download={download}
                     onRefresh={refreshStatus}
                     onClose={() => {
@@ -234,9 +243,9 @@ function Sidebar({ projects, screen, busyProject, status, onNew, onOpen, onSetti
             </div>
             <div className='px-4 pb-3'>
                 <div className='flex items-center gap-2 font-serif text-lg'>
-                    <Clapperboard className='h-5 w-5 text-accent' /> Stickman Studio
+                    <Clapperboard className='h-5 w-5 text-accent' /> Toon Studio
                 </div>
-                <p className='mt-0.5 text-xs text-subtle'>Story in, stickman video out. All on this Mac.</p>
+                <p className='mt-0.5 text-xs text-subtle'>Idea in, animated video out. All on this Mac.</p>
             </div>
             <div className='px-3 pb-3'>
                 <Button variant={screen.kind === 'new' ? 'primary' : 'secondary'} className='w-full' onClick={onNew}>
@@ -327,7 +336,7 @@ function Rail({ projects, screen, busyProject, status, onNew, onOpen, onSettings
                 })}
             </div>
             <div className='flex flex-col items-center gap-1 border-t border-line py-2'>
-                <IconButton label={status.cloud.connected ? (cloudProblem ? 'Cloud unavailable' : 'Cloudflare connected') : `On this Mac · ${status.ramGb} GB`} size='icon-sm' onClick={onSettings}>
+                <IconButton label={status.cloud.connected ? (cloudProblem ? 'Cloud unavailable' : 'Cloud AI connected') : `On this Mac · ${status.ramGb} GB`} size='icon-sm' onClick={onSettings}>
                     {status.cloud.connected ? (
                         cloudProblem ? <AlertTriangle className='h-4 w-4 text-warning-fg' /> : <Cloud className='h-4 w-4 text-success-fg' />
                     ) : (
@@ -357,14 +366,14 @@ function CloudPill({ status, onClick }: { status: Status; onClick: () => void })
         title = `${capitalise(recentProblem.reason)}. Working on this Mac until it’s back.`;
     } else if (on) {
         icon = <Cloud className='h-3.5 w-3.5' />;
-        label = 'Cloudflare connected';
+        label = 'Cloud AI connected';
         tone = 'text-success-fg';
-        title = 'Each video chooses where it’s made: this Mac or Cloudflare.';
+        title = 'Each video chooses where it’s made: this Mac or the cloud AI.';
     } else {
         icon = <CloudOff className='h-3.5 w-3.5' />;
         label = `On this Mac · ${status.ramGb} GB`;
         tone = 'text-subtle';
-        title = 'Everything runs on this Mac. You can connect Cloudflare in Settings to draw faster.';
+        title = 'Everything runs on this Mac. You can connect a cloud AI in Settings to draw faster.';
     }
     return (
         <button onClick={onClick} title={title} className={cx('flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] hover:bg-panel-2', tone)}>

@@ -78,7 +78,7 @@ def reap_orphans() -> int:
             continue
         executable = parts[2].split(" --", 1)[0]
         name = os.path.basename(executable).removesuffix("-aarch64-apple-darwin")
-        if name in SERVER_NAMES and ("binaries" in executable or "Stickman Studio" in executable or str(paths.bin_dir()) in executable):
+        if name in SERVER_NAMES and ("binaries" in executable or "Toon Studio" in executable or str(paths.bin_dir()) in executable):
             try:
                 os.kill(int(parts[0]), signal.SIGTERM)
                 stopped += 1
@@ -95,10 +95,9 @@ class Engines:
         self.port = 0
         self.last_used = time.monotonic()
         self.cancelled = threading.Event()
-        # Cloudflare (when switched on): what failed during this job, so the rest of the job
         # stays on this Mac instead of failing again; and who to tell when it falls back.
         self.cloud_failed: set[str] = set()
-        self.use_cloud = False  # the current video is made on Cloudflare
+        self.use_cloud = False
         # Whatever happens to the engine (an error, the end of a script), never leave a model running.
         atexit.register(self.stop)
         self.on_fallback = lambda kind, reason, just_this_one: None
@@ -112,11 +111,11 @@ class Engines:
         self.use_cloud = False
 
     def cloud_active(self, kind: str) -> bool:
-        """Whether `kind` ("images" or "story") goes to Cloudflare now."""
+        """Whether `kind` ("images" or "story") goes to the cloud AI now."""
         return self.use_cloud and kind not in self.cloud_failed and cloud.connected()
 
     def _try_cloud(self, kind: str, work):
-        """Runs `work` on Cloudflare if the video is made there; returns None to use this Mac."""
+        """Runs `work` on the cloud AI if the video is made there; returns None to use this Mac."""
         if not self.cloud_active(kind):
             return None
         try:
@@ -218,7 +217,7 @@ class Engines:
     def chat_json(self, system: str, user: str, schema: dict, temperature=0.7, max_tokens=6000) -> dict:
         """Asks the story model for an answer forced into `schema` (llama.cpp turns the schema
         into a grammar, so the reply is always valid JSON of that shape). For a video made on
-        Cloudflare, Gemma 4 26B there writes it instead, falling back to this Mac if it can't."""
+        the cloud AI, Gemma 4 26B there writes it instead, falling back to this Mac if it can't."""
         answer = self._try_cloud("story", lambda: cloud.chat_json(system, user, schema, temperature, max_tokens))
         if answer is not None:
             return answer
@@ -245,7 +244,7 @@ class Engines:
     # The image model
 
     def draw(self, prompt: str, width: int, height: int, seed: int) -> bytes:
-        """Draws one image with the chosen image model and returns it as PNG bytes: on Cloudflare
+        """Draws one image with the chosen image model and returns it as PNG bytes: on the cloud AI
         for a video made there (the same model), otherwise or as a fallback on this Mac."""
         png = self._try_cloud("images", lambda: cloud.draw(prompt, width, height, seed))
         if png is not None:

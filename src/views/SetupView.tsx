@@ -37,7 +37,7 @@ export function SetupView({ status, download, onDone }: { status: Status; downlo
                 <div className='space-y-2'>
                     <h1 className='font-serif text-3xl'>One download, then it’s all yours</h1>
                     <p className='text-muted'>
-                        Stickman Studio makes videos entirely on this Mac. Nothing you write is uploaded. First it needs three small AI models:
+                        Toon Studio makes videos entirely on this Mac. Nothing you write is uploaded. First it needs three small AI models:
                     </p>
                 </div>
                 <div className='space-y-3 rounded-xl border border-line bg-panel p-4'>

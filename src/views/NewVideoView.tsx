@@ -1,14 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowRight, Monitor, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, lengthLabel, nearestLength, readingSeconds, TELLING_NOTES, type Captions, type Engine, type JobEvent, type Options, type Ratio, type Telling } from '../lib/api';
+import { api, lengthLabel, nearestLength, readingSeconds, TELLING_NOTES, voicesFor, type Captions, type Engine, type JobEvent, type Options, type Ratio, type Telling } from '../lib/api';
 import { EnginePicker, engineNote } from '../components/EnginePicker';
 import { Button, Field, Segmented, Select, Spinner, cx } from '../components/ui';
 import { StyleSwatch } from '../components/StyleSwatch';
-import { MusicPreview } from '../components/MusicPreview';
+import { MusicPreview, VoicePreview } from '../components/MusicPreview';
+import { loadDefaults } from '../lib/defaults';
 
 const EXAMPLES = [
-    'A stickman finds a tiny seed in a cracked city street and waters it every day, until the whole street turns green.',
+    'A lonely character finds a tiny seed in a cracked city street and waters it every day, until the whole street turns green.',
     'Gravity bends space and time so strongly around a black hole that even light cannot escape.',
     'Why the most successful people schedule time to do nothing.',
     'The compound effect: tiny 1% improvements every day add up to something huge in a year.',
@@ -37,46 +38,47 @@ export function NewVideoView({
     onCreated: (id: string) => void;
 }) {
     const draft = loadDraft();
+    const base = loadDefaults(options);
     const [story, setStory] = useState<string>(draft.story ?? '');
-    const [ratio, setRatio] = useState<Ratio>(draft.ratio ?? '9:16');
-    const [duration, setDuration] = useState<number>(draft.duration ?? 60);
-    const [style, setStyle] = useState<string>(draft.style ?? options.styles[0].id);
-    const [language, setLanguage] = useState<string>(options.languages.some((l) => l.id === draft.language) ? draft.language : 'en');
-    const voicesFor = (lang: string) => options.voices.filter((v) => v.language === lang);
-    const [voice, setVoice] = useState<string>(voicesFor(language).some((v) => v.id === draft.voice) ? draft.voice : voicesFor(language)[0].id);
-    const [telling, setTelling] = useState<Telling>(options.telling.some((t) => t.id === draft.telling) ? draft.telling : 'mixed');
+    const [ratio, setRatio] = useState<Ratio>(base.ratio);
+    const [duration, setDuration] = useState<number>(base.duration);
+    const [style, setStyle] = useState<string>(base.style);
+    const [language, setLanguage] = useState<string>(base.language);
+    const [voice, setVoice] = useState<string>(base.voice);
+    const [telling, setTelling] = useState<Telling>(base.telling);
     /** The narrator speaks the video's language: a new language brings its first voice. */
     const chooseLanguage = (lang: string) => {
         setLanguage(lang);
-        if (!voicesFor(lang).some((v) => v.id === voice)) setVoice(voicesFor(lang)[0].id);
+        if (!voicesFor(options, lang).some((v) => v.id === voice)) setVoice(voicesFor(options, lang)[0].id);
     };
-    const [captions, setCaptions] = useState<Captions>(draft.captions === 'both' ? 'subtitles' : (draft.captions ?? 'subtitles'));
-    const [musicMood, setMusicMood] = useState<string>(draft.musicMood ?? 'curious');
-    const [engine, setEngine] = useState<Engine>(draft.engine === 'cloud' && cloudConnected ? 'cloud' : 'local');
-    const [mode, setMode] = useState<string>(options.modes.some((m) => m.id === draft.mode) ? draft.mode : 'auto');
-    const [speed, setSpeed] = useState<number>(draft.speed ?? 1);
+    const [captions, setCaptions] = useState<Captions>(base.captions);
+    const [musicMood, setMusicMood] = useState<string>(base.musicMood);
+    const [transitions, setTransitions] = useState<string>(base.transitions);
+    const [engine, setEngine] = useState<Engine>(base.engine === 'cloud' && cloudConnected ? 'cloud' : 'local');
+    const [mode, setMode] = useState<string>(base.mode);
+    const [speed, setSpeed] = useState<number>(base.speed);
     const template = options.modes.find((m) => m.id === mode) ?? options.modes[0];
     // The length that would fit the whole text (stories and scripts are told nearly in full).
     const fitsLength = nearestLength(readingSeconds(story), options.durations);
 
-    /** A template brings its suggested music, captions and pace (all still changeable). */
     const chooseMode = (id: string) => {
         setMode(id);
         const defaults = options.modes.find((m) => m.id === id)?.defaults ?? {};
         if (defaults.musicMood) setMusicMood(defaults.musicMood);
         if (defaults.captions) setCaptions(defaults.captions);
         if (defaults.speed) setSpeed(defaults.speed);
+        if (defaults.telling) setTelling(defaults.telling);
     };
     const [working, setWorking] = useState(false);
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
         try {
-            localStorage.setItem(DRAFT_KEY, JSON.stringify({ story, ratio, duration, style, voice, captions, musicMood, engine, mode, speed, language, telling }));
+            localStorage.setItem(DRAFT_KEY, JSON.stringify({ story }));
         } catch {
             // Not saving the draft is fine.
         }
-    }, [story, ratio, duration, style, voice, captions, musicMood, engine, mode, speed, language, telling]);
+    }, [story]);
 
     useEffect(() => {
         if (!working) return;
@@ -91,7 +93,7 @@ export function NewVideoView({
         setWorking(true);
         setElapsed(0);
         try {
-            const project = await api.createProject(story, { ratio, duration, style, voice, captions, musicMood, engine, mode, speed, language, telling });
+            const project = await api.createProject(story, { ratio, duration, style, voice, captions, musicMood, transitions, sfx: base.sfx, engine, mode, speed, language, telling });
             setStory('');
             onCreated(project.id);
         } catch (e) {
@@ -191,11 +193,14 @@ export function NewVideoView({
                                 </div>
                             )}
                             <Field label='Style'>
-                                <div className='grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2'>
+                                <div role='radiogroup' aria-label='Visual style' className='grid grid-cols-[repeat(auto-fill,minmax(5.5rem,1fr))] gap-2'>
                                     {options.styles.map((s) => (
                                         <button
                                             key={s.id}
                                             onClick={() => setStyle(s.id)}
+                                            role='radio'
+                                            aria-checked={style === s.id}
+                                            aria-label={s.name}
                                             title={s.note}
                                             className={cx(
                                                 'overflow-hidden rounded-lg border-2 bg-panel text-left transition-colors',
@@ -237,13 +242,16 @@ export function NewVideoView({
                                     {language !== 'en' && ' Scenes stay in English for the image model; everything spoken and captioned is in your language.'}
                                 </p>
                                 <Field label={telling === 'characters' ? 'Fallback voice' : 'Narrator'}>
-                                    <Select value={voice} onChange={(e) => setVoice(e.target.value)}>
-                                        {voicesFor(language).map((v) => (
-                                            <option key={v.id} value={v.id}>
-                                                {v.name}
-                                            </option>
-                                        ))}
-                                    </Select>
+                                    <div className='flex min-w-0 gap-2'>
+                                        <Select value={voice} onChange={(e) => setVoice(e.target.value)}>
+                                            {voicesFor(options, language).map((v) => (
+                                                <option key={v.id} value={v.id}>
+                                                    {v.name}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                        <VoicePreview voice={voice} />
+                                    </div>
                                 </Field>
                                 <Field label='Pace'>
                                     <Segmented
@@ -268,6 +276,15 @@ export function NewVideoView({
                                         </Select>
                                         <MusicPreview mood={musicMood} />
                                     </div>
+                                </Field>
+                                <Field label='Transitions'>
+                                    <Select value={transitions} onChange={(e) => setTransitions(e.target.value)}>
+                                        {options.transitions.map((t) => (
+                                            <option key={t.id} value={t.id}>
+                                                {t.name}
+                                            </option>
+                                        ))}
+                                    </Select>
                                 </Field>
                                 <Field label='Captions'>
                                     <Select value={captions} onChange={(e) => setCaptions(e.target.value as Captions)}>

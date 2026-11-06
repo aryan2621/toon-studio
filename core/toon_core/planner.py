@@ -57,6 +57,10 @@ Part: a 1-3 word name for the part of the video this shot belongs to (e.g. "Alon
 
 Camera: push_in (tension, a reveal, emotion), pull_out (the bigger picture), pan_left / pan_right (travel, journeys, comparison), rise (lift, hope, climbing), still (a quiet beat), focus_left / focus_center / focus_right (a close look at the person on that side of the picture, for whoever is speaking or reacting). Choose what fits each moment.
 
+Transition: how the video moves INTO this shot from the previous one: cut (a plain cut, the default for a quick next beat), crossfade (calm, time drifting), dip (a pause, an ending or a time jump), flash (a surprise, a reveal), push (a new part), wipe (a change of place), whip (fast action), zoom (a dramatic realisation), iris (a focus on one thing), glitch (technology, something going wrong). Vary them; most shots stay "cut"; the first shot's is ignored.
+
+Emotion: how the speaker says this line: neutral (plain narration, the default), happy, excited (a win, a discovery), calm (reassuring, gentle), serious (a warning, a fact that matters), sad (loss, regret), angry (frustration, a failure blamed), scared (danger, a bad surprise), whisper (a secret, a quiet beat), sarcastic (dry jokes). Match it to the line's feeling and the moment in the story; for a character's own line use that character's feeling. Vary it, and keep it "neutral" when the line has no particular feeling.
+
 Caption: 1-3 punchy words that sum up the shot for a big on-screen overlay ("The only light", "Nothing escapes"), in the video's language. It must not repeat the narration word for word.
 
 Style: {style_rule}"""
@@ -100,7 +104,7 @@ Use the part names: Setup, Trouble, Journey, Turning point, Ending.""",
 5. The line (about 10%): one unforgettable closing line, then a short call to act ("Start today.").
 Keep the source's message and any lines it insists on. Concrete images over clichés; no invented statistics or quotes.
 Use the part names: The struggle, The reframe, The proof, The rise, The line.""",
-        "defaults": {"musicMood": "uplifting", "captions": "keywords", "speed": 1.0},
+        "defaults": {"musicMood": "cinematic", "captions": "keywords", "speed": 1.0},
     },
     "explainer": {
         "name": "Explainer",
@@ -124,7 +128,7 @@ Use the part names: Hook, The myth, The reveal, The insight, Takeaway.""",
 3. Outro (1 shot): a one-line wrap-up or a question to the viewer.
 Use the items the source gives; if it only gives a topic, choose well-known, true items. Never invent statistics.
 Part names: Intro, then "Number N" for each item's shots, then Outro.""",
-        "defaults": {"musicMood": "uplifting", "captions": "keywords", "speed": 1.0},
+        "defaults": {"musicMood": "upbeat", "captions": "keywords", "speed": 1.0},
     },
     "howto": {
         "name": "How-to",
@@ -145,6 +149,20 @@ Part names: Goal, "Step N" for each step's shots, Tip, Result.""",
 Scenes: one quiet, symbolic image per line.
 Part names: the stanza ("Verse 1", "Verse 2"...) or, for a quote, "The quote".""",
         "defaults": {"musicMood": "calm", "captions": "subtitles", "speed": 0.9},
+    },
+    "devchat": {
+        "name": "Dev chat",
+        "note": "A developer and an AI coding mascot talking through an outage or bug.",
+        "form": """TEMPLATE: DEV CHAT. A short conversation between a developer and an AI coding assistant mascot about ONE production incident or system failure, in this exact shape:
+1. Alert (about 10% of the shots): the developer reports what broke in one tense line (the symptom: errors, an outage, a leaked endpoint).
+2. Investigate (about 30%): the mascot asks short questions and checks the logs; the developer answers. Each line moves the search forward.
+3. Root cause (about 25%): the mascot finds the real cause, usually a small, plain mistake.
+4. The fix (about 20%): what they change, step by step, in plain words.
+5. Aftermath (about 15%): a dry joke or the lesson, as the mascot's last line.
+Dialogue only: every line is spoken by the developer or the mascot, short, natural and a little funny; technical but a non-expert can follow. No narrator. Never invent real company names, statistics or CVE numbers.
+The MAIN character (listed first in characters) is the mascot; the developer is the second. Use the mascot's name from the source; if there is none, call it "Buddy".
+Use the part names: Alert, Investigate, Root cause, The fix, Aftermath.""",
+        "defaults": {"musicMood": "lofi", "captions": "subtitles", "speed": 1.0, "telling": "characters"},
     },
 }
 
@@ -175,8 +193,19 @@ LANGUAGE_RULES = {
     ),
 }
 
+def _latin_rule(name: str) -> str:
+    return (f"Language: write the title, message, narration and captions in natural, simple, everyday spoken {name} (as people really speak it: "
+            "common words, short sentences). Write numbers as words. "
+            "The scenes, the characters' looks and the part names stay in English, because the image model only reads English.")
+
+
+LANGUAGE_RULES.update({"es": _latin_rule("Spanish"), "fr": _latin_rule("French")})
+
 # The words a numbered item or step starts with, in each language.
-ITEM_LABELS = {"en": {"Number": "Number", "Step": "Step"}, "hi": {"Number": "नंबर", "Step": "स्टेप"}}
+ITEM_LABELS = {
+    "en": {"Number": "Number", "Step": "Step"}, "hi": {"Number": "नंबर", "Step": "स्टेप"},
+    "es": {"Number": "Número", "Step": "Paso"}, "fr": {"Number": "Numéro", "Step": "Étape"},
+}
 
 FORMAT_RULES = {
     "9:16": "The frame is vertical (9:16): stack the action vertically, keep the main figure large and central, use height and depth.",
@@ -282,16 +311,18 @@ def _schema(count: int, choose_style: bool) -> dict:
                     "same_picture": {"type": "boolean"},
                     "scene": {"type": "string", "maxLength": 600},
                     "camera": {"type": "string", "enum": styles.CAMERA_MOVES},
+                    "transition": {"type": "string", "enum": list(styles.TRANSITIONS)},
+                    "emotion": {"type": "string", "enum": list(styles.EMOTIONS)},
                     "caption": {"type": "string", "maxLength": 40},
                     "look_change": {"type": "string", "maxLength": 160},
                 },
-                "required": ["part", "speaker", "narration", "same_picture", "scene", "look_change", "camera", "caption"],
+                "required": ["part", "speaker", "narration", "same_picture", "scene", "look_change", "camera", "transition", "emotion", "caption"],
             },
         },
     }
     required = ["title", "message", "characters", "shots"]
     if choose_style:
-        properties = {"style": {"type": "string", "enum": list(styles.STYLES)}, **properties}
+        properties = {"style": {"type": "string", "enum": list(styles.auto_styles())}, **properties}
         required = ["style", *required]
     return {"type": "object", "properties": properties, "required": required}
 
@@ -308,7 +339,7 @@ FIGURES = {
         'e.g. "a girl of about ten with a short black bob, a yellow raincoat and red boots, clutching a paper map"',
     ),
     "auto": (
-        "Whether the characters are stick figures or fully illustrated people depends on the style you choose: stick figures for the classic, studio-tech and cinematic styles (then a look is only one or two drawable things that set them apart: an accessory, a hat, a scarf, a prop, never age, realistic hair or full outfits); real people with age, hair, clothes and expression for storybook and comic.",
+        "Whether the characters are stick figures or fully illustrated people depends on the style you choose: stick figures for the classic styles (then a look is only one or two drawable things that set them apart: an accessory, a hat, a scarf, a prop, never age, realistic hair or full outfits); doodle or clay people with age, hair, clothes and expression for whiteboard, chalkboard and claymation.",
         'e.g. "a girl of about ten with a short black bob and a yellow raincoat", or for a stickman style "a small stick figure with a ponytail"',
     ),
 }
@@ -317,14 +348,13 @@ FIGURES = {
 def _style_rule(style: str) -> str:
     if style != "auto":
         return f"the user chose \"{styles.STYLES[style]['name']}\", so don't choose one."
-    choices = "; ".join(f"\"{k}\": {v['note']}" for k, v in styles.STYLES.items())
+    choices = "; ".join(f"\"{k}\": {v['note']}" for k, v in styles.auto_styles().items())
     return (
         "choose the visual style that best fits the source's mood and setting, and give it as \"style\". "
-        f"Options: {choices}. Night, darkness or a single light suits classic-dark or cinematic; "
-        "a warm, magical or gentle children's tale suits storybook; "
-        "action, drama or heroes suit comic; a crisp explanation suits classic-light or studio-tech. "
+        f"Options: {choices}. A crisp explanation or an abstract idea suits classic-light, or classic-dark for night and darkness; "
+        "a hand-drawn lesson suits whiteboard or chalkboard; a playful craft feel suits claymation. "
         "When the story depends on how someone looks (their hair, face, clothes or age, or a change in them), "
-        "choose storybook or comic, whose characters are real people: stick figures can't show it."
+        "choose whiteboard, chalkboard or claymation, whose characters are real people: stick figures can't show it."
     )
 
 
@@ -657,7 +687,8 @@ def write_plan(engines: Engines, story: str, settings: dict, previous: dict | No
     mode = MODES.get(settings.get("mode", "auto"), MODES["auto"])
     count = shot_count(duration)
     words = round(duration * styles.LANGUAGES[language]["words_per_second"])
-    figures, look_example = FIGURES["auto" if style == "auto" else styles.kind(style)]
+    figures, look_example = (styles.STYLES.get(style, {}).get("figures")
+                             or FIGURES["auto" if style == "auto" else styles.kind(style)])
     system = (SYSTEM.replace("{form_rule}", mode["form"]).replace("{format_rule}", FORMAT_RULES[ratio])
               .replace("{style_rule}", _style_rule(style)).replace("{figures_rule}", figures)
               .replace("{look_example}", look_example).replace("{telling_rule}", TELLING_RULES[telling])
@@ -794,6 +825,8 @@ def write_plan(engines: Engines, story: str, settings: dict, previous: dict | No
             "scene": scene,
             "samePicture": same,
             "camera": camera,
+            "transition": shot.get("transition") if shot.get("transition") in styles.TRANSITIONS else "auto",
+            "emotion": shot.get("emotion") if shot.get("emotion") in styles.EMOTIONS else "neutral",
             "caption": shot["caption"].strip().strip(_QUOTES),
             "looks": dict(looks_now),
         })
@@ -834,8 +867,8 @@ def write_plan(engines: Engines, story: str, settings: dict, previous: dict | No
             shot["narration"] = " ".join(kept)
 
     if style == "auto":
-        plan["style"] = answer.get("style") if answer.get("style") in styles.STYLES else "cinematic"
+        plan["style"] = answer.get("style") if answer.get("style") in styles.auto_styles() else "classic-light"
         # A story whose characters change how they look needs real people: stick figures can't show it.
         if styles.kind(plan["style"]) == "stick" and any(s.get("looks") for s in shots):
-            plan["style"] = "storybook"
+            plan["style"] = "whiteboard"
     return plan

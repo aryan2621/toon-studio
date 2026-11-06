@@ -1,4 +1,4 @@
-"""The models Stickman Studio downloads once, the user's choices in Settings, and downloads.
+"""The models Toon Studio downloads once, the user's choices in Settings, and downloads.
 
 A "choice" is what Settings shows (Story AI, Image AI); each needs one or more files.
 """
@@ -179,7 +179,7 @@ class Downloader:
         f = FILES[file_id]
         final = path(file_id)
         part = final.with_suffix(final.suffix + ".part")
-        request = urllib.request.Request(f.url, headers={"User-Agent": "StickmanStudio/0.1"})
+        request = urllib.request.Request(f.url, headers={"User-Agent": "ToonStudio/0.1"})
         try:
             with urllib.request.urlopen(request, timeout=60) as response, open(part, "wb") as out:
                 total = int(response.headers.get("Content-Length") or 0)

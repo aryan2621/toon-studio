@@ -11,6 +11,7 @@ are drawn by ffmpeg, whose HarfBuzz places Devanagari's vowel signs and conjunct
 """
 
 import math
+import random
 import re
 import subprocess
 import tempfile
@@ -21,7 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from . import audio, paths, styles, voice
 
@@ -78,6 +79,7 @@ class Shot:
     stage: str
     shared: bool = False  # shows the previous shot's picture: the camera glides instead of cutting
     language: str = "en"
+    transition: str = "auto"
 
 
 def _font(size: int):
@@ -332,8 +334,12 @@ def _draw_caption(frame: Image.Image, c: Caption, t: float):
 CARD_COLOURS = {  # background, text
     "classic-light": ((255, 255, 255), (40, 40, 40)),
     "classic-dark": ((10, 10, 10), (230, 230, 230)),
-    "studio-tech": ((244, 246, 249), (40, 48, 60)),
-    "cinematic": ((34, 26, 44), (240, 226, 210)),
+    "whiteboard": ((250, 250, 250), (30, 30, 30)),
+    "chalkboard": ((30, 58, 48), (235, 235, 225)),
+    "claymation": ((247, 226, 196), (80, 50, 40)),
+    "fruit-drama": ((255, 236, 210), (120, 40, 40)),
+    "organs": ((255, 214, 220), (110, 30, 50)),
+    "ai-mascot": ((20, 22, 30), (240, 150, 80)),
 }
 
 
@@ -388,6 +394,119 @@ def _trim(pcm: np.ndarray) -> np.ndarray:
     return pcm[max(0, loud[0] - keep): loud[-1] + keep]
 
 
+
+
+def _solid(size, colour):
+    return Image.new("RGB", size, colour)
+
+
+def _t_crossfade(a, b, p):
+    return Image.blend(a, b, _ease_in_out(p))
+
+
+def _dip(a, b, p, colour):
+    e = _ease_in_out(p)
+    return Image.blend(a, _solid(a.size, colour), e * 2) if e < 0.5 else Image.blend(_solid(a.size, colour), b, e * 2 - 1)
+
+
+def _t_dip(a, b, p):
+    return _dip(a, b, p, (0, 0, 0))
+
+
+def _t_flash(a, b, p):
+    white = _solid(a.size, (255, 255, 255))
+    return Image.blend(a, white, p / 0.3) if p < 0.3 else Image.blend(white, b, _ease_out((p - 0.3) / 0.7))
+
+
+def _slid(a, b, offset):
+    w, h = a.size
+    canvas = Image.new("RGB", a.size)
+    canvas.paste(a, (-offset, 0))
+    canvas.paste(b, (w - offset, 0))
+    return canvas
+
+
+def _t_push(a, b, p):
+    return _slid(a, b, int(a.size[0] * _ease_out(p)))
+
+
+def _t_whip(a, b, p):
+    frame = _slid(a, b, int(a.size[0] * _ease_in_out(p)))
+    return frame.filter(ImageFilter.GaussianBlur(14 * math.sin(math.pi * p)))
+
+
+def _t_wipe(a, b, p):
+    w, h = a.size
+    feather = max(1, w // 8)
+    edge = _ease_in_out(p) * (w + feather) - feather
+    column = np.clip((edge - np.arange(w)) / feather + 1, 0, 1)
+    mask = Image.fromarray((np.tile(column, (h, 1)) * 255).astype(np.uint8))
+    return Image.composite(b, a, mask)
+
+
+def _zoomed(image, s):
+    w, h = image.size
+    s = max(1.0, s)
+    cw, ch = w / s, h / s
+    return image.resize((w, h), Image.BILINEAR, box=((w - cw) / 2, (h - ch) / 2, (w + cw) / 2, (h + ch) / 2))
+
+
+def _t_zoom(a, b, p):
+    e = _ease_in_out(p)
+    frame = Image.blend(_zoomed(a, 1 + 0.4 * e), _zoomed(b, 1.4 - 0.4 * e), e)
+    return frame.filter(ImageFilter.GaussianBlur(9 * math.sin(math.pi * p)))
+
+
+def _t_iris(a, b, p):
+    w, h = a.size
+    r = math.hypot(w, h) / 2 * _ease_in_out(p) / 4
+    small = Image.new("L", (w // 4, h // 4))
+    ImageDraw.Draw(small).ellipse((w / 8 - r, h / 8 - r, w / 8 + r, h / 8 + r), fill=255)
+    return Image.composite(b, a, small.resize(a.size, Image.BILINEAR))
+
+
+def _t_glitch(a, b, p):
+    w, h = a.size
+    frame = (a if p < 0.5 else b).copy()
+    rng = random.Random(int(p * 24))
+    strength = math.sin(math.pi * p)
+    for _ in range(7):
+        top = rng.randrange(0, h)
+        band = frame.crop((0, top, w, min(h, top + rng.randrange(h // 20, h // 6))))
+        frame.paste(ImageChops.offset(band, int(rng.uniform(-0.08, 0.08) * w * strength), 0), (0, top))
+    shift = int(w * 0.012 * strength) + 1
+    r, g, bl = frame.split()
+    return Image.merge("RGB", (ImageChops.offset(r, shift, 0), g, ImageChops.offset(bl, -shift, 0)))
+
+
+TRANSITIONS = {
+    "crossfade": (0.5, _t_crossfade),
+    "dip": (0.6, _t_dip),
+    "flash": (0.35, _t_flash),
+    "push": (SLIDE, _t_push),
+    "wipe": (0.5, _t_wipe),
+    "whip": (0.4, _t_whip),
+    "zoom": (0.5, _t_zoom),
+    "iris": (0.55, _t_iris),
+    "glitch": (0.3, _t_glitch),
+}
+
+
+def _transitions(shots: list["Shot"], cuts: list[float]) -> dict[int, tuple[str, float]]:
+    """The transition into each shot that has one, with its length. An unset ("auto") one slides on a
+    change of part and cuts otherwise, as videos always did; a shared picture never has one."""
+    out = {}
+    for k in range(1, len(shots)):
+        if shots[k].shared:
+            continue
+        kind = shots[k].transition
+        if kind != "cut" and kind not in TRANSITIONS:
+            kind = "push" if shots[k].stage != shots[k - 1].stage else "cut"
+        if kind in TRANSITIONS:
+            out[k] = (kind, min(TRANSITIONS[kind][0], 0.6 * (cuts[k + 1] - cuts[k])))
+    return out
+
+
 def render(shots: list[Shot], ratio: str, captions: str, music_mood: str, music_file: Path | None,
            sfx: bool, out: Path, progress, cancel: threading.Event):
     size = styles.FORMATS[ratio]["out"]
@@ -403,7 +522,7 @@ def render(shots: list[Shot], ratio: str, captions: str, music_mood: str, music_
         t += durations[-1] + (PAUSE_SENTENCE if ends_sentence else PAUSE_CONTINUE)
     total = starts[-1] + durations[-1] + TAIL
     cuts = [0.0] + [s - CUT_EARLY for s in starts[1:]] + [total]
-    slides = {k for k in range(1, len(shots)) if shots[k].stage != shots[k - 1].stage and not shots[k].shared}
+    trans = _transitions(shots, cuts)
 
     # Soundtrack.
     narration = np.zeros(int(total * voice.SAMPLE_RATE) + 1, dtype=np.int16)
@@ -416,7 +535,7 @@ def render(shots: list[Shot], ratio: str, captions: str, music_mood: str, music_
         bed = audio.music(music_mood, total)
     else:
         bed = None
-    effects = [(cuts[k], audio.whoosh(seed=k)) for k in sorted(slides)] if sfx else []
+    effects = [(cuts[k] + trans[k][1] / 2, audio.transition_sound(trans[k][0], k)) for k in sorted(trans)] if sfx else []
     mixed = audio.mix(narration, voice.SAMPLE_RATE, bed, effects)
     work = out.parent / ".render"
     work.mkdir(exist_ok=True)
@@ -458,7 +577,7 @@ def render(shots: list[Shot], ratio: str, captions: str, music_mood: str, music_
             if since < GLIDE:
                 before, e = _view(shots[k - 1].camera, 1.0), _ease_in_out(since / GLIDE)
                 view = tuple(a + (b - a) * e for a, b in zip(before, view))
-        elif k > 0 and k not in slides and since < PUNCH:
+        elif k > 0 and k not in trans and since < PUNCH:
             punch = 1 + 0.045 * (1 - _ease_out(since / PUNCH))
         return _frame(base(k), view, size, punch)
 
@@ -481,15 +600,9 @@ def render(shots: list[Shot], ratio: str, captions: str, music_mood: str, music_
             while k < len(shots) - 1 and t >= cuts[k + 1]:
                 k += 1
             frame = picture(k, t)
-            # A stage change: the new shot pushes the old one out to the left.
-            if k in slides and t - cuts[k] < SLIDE:
-                p = _ease_out((t - cuts[k]) / SLIDE)
-                old = picture(k - 1, t)
-                offset = int(size[0] * p)
-                canvas = Image.new("RGB", size)
-                canvas.paste(old, (-offset, 0))
-                canvas.paste(frame, (size[0] - offset, 0))
-                frame = canvas
+            if k in trans and t - cuts[k] < trans[k][1]:
+                kind, length = trans[k]
+                frame = TRANSITIONS[kind][1](picture(k - 1, t), frame, (t - cuts[k]) / length)
             live = [c for c in overlay if c.start <= t < c.end]
             if live:
                 frame = frame.convert("RGBA")

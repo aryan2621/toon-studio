@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Stickman Studio",
+  "productName": "Toon Studio",
   "version": "0.1.0",
-  "identifier": "com.stickmanstudio.app",
+  "identifier": "com.toonstudio.app",
   "build": {
     "beforeDevCommand": "pnpm build:engines && pnpm build:core && pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Stickman Studio",
+        "title": "Toon Studio",
         "width": 1240,
         "height": 820,
         "minWidth": 720,
@@ -27,7 +27,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$VIDEO/Stickman Studio/**",
+          "$VIDEO/Toon Studio/**",
           "$APPDATA/music-samples/**"
         ]
       }
@@ -37,9 +37,9 @@
     "active": true,
     "targets": "all",
     "category": "Video",
-    "shortDescription": "Story to stickman video, on your Mac",
+    "shortDescription": "Idea to animated video, on your Mac",
     "externalBin": [
-      "binaries/stickman-core",
+      "binaries/toon-core",
       "binaries/llama-server",
       "binaries/sd-server"
     ],

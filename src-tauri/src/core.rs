@@ -97,11 +97,11 @@ fn spawn(app: &AppHandle) -> Result<CommandChild, String> {
 
     let (mut events, child) = app
         .shell()
-        .sidecar("stickman-core")
+        .sidecar("toon-core")
         .map_err(|e| format!("Could not start the engine: {e}"))?
-        .env("STICKMAN_DATA_DIR", data)
-        .env("STICKMAN_LOG_DIR", logs)
-        .env("STICKMAN_BIN_DIR", bin)
+        .env("TOON_DATA_DIR", data)
+        .env("TOON_LOG_DIR", logs)
+        .env("TOON_BIN_DIR", bin)
         .spawn()
         .map_err(|e| format!("Could not start the engine: {e}"))?;
 
@@ -153,7 +153,7 @@ fn handle_line(app: &AppHandle, line: &[u8]) {
     }
 }
 
-/// Every UI request goes through here: `method` names a core method (see core/stickman_core/ipc.py).
+/// Every UI request goes through here: `method` names a core method (see core/toon_core/ipc.py).
 #[tauri::command]
 pub async fn core(app: AppHandle, core: State<'_, Core>, method: String, params: Option<Value>) -> Result<Value, String> {
     core.call(&app, &method, params.unwrap_or(Value::Null), None).await

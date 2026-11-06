@@ -42,7 +42,7 @@ def top_apps(limit: int = 3) -> list[dict]:
         # "/Applications/Brave Browser.app/Contents/Frameworks/…/Helper" → "Brave Browser"
         app = re.search(r"/([^/]+)\.app/", command)
         name = app.group(1) if app else Path(command.strip()).name
-        if name in ("Stickman Studio", "sd-server", "llama-server", "stickman-core", "kernel_task", "WindowServer"):
+        if name in ("Toon Studio", "Toon Studio", "sd-server", "llama-server", "toon-core", "kernel_task", "WindowServer"):
             continue
         usage[name] += int(rss)
     ranked = sorted(usage.items(), key=lambda kv: kv[1], reverse=True)[:limit]
